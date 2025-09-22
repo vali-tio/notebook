@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Buku Catatan - Expense Notebook (Single File)</title>
+ <link rel="manifest" href="manifest.webmanifest">
+ <style>
+    :root{
+      --bg:#0f1724;--card:#0b1220;--accent:#06b6d4;--muted:#94a3b8;--glass:rgba(255,255,255,0.03);--danger:#ef4444;
+      --text:#e6eef6;
+    }
+    body.light{
+      --bg:#f9fafb;--card:#ffffff;--accent:#0284c7;--muted:#475569;--glass:rgba(0,0,0,0.03);--danger:#dc2626;
+      --text:#0f172a;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;color:var(--text);background:var(--bg);padding:12px;transition:background 0.25s,color 0.25s}
+    .app{max-width:980px;margin:6px auto;padding:12px}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    h1{font-size:18px;margin:0}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    button, .btn{background:var(--accent);color:#fff;border:0;padding:8px 12px;border-radius:10px;font-weight:600;cursor:pointer;transition:background 0.2s}
+    .btn.ghost{background:transparent;border:1px solid rgba(0,0,0,0.06);color:var(--muted)}
+    .btn.danger{background:var(--danger);color:white}
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+    .card{background:var(--card);padding:12px;border-radius:12px;margin-top:12px;border:1px solid rgba(0,0,0,0.05)}
+    .summary{display:flex;gap:12px;flex-wrap:wrap}
+    .tile{flex:1;min-width:160px;background:var(--glass);padding:10px;border-radius:8px}
+    .tile .value{font-weight:700;font-size:18px}
+    .filters{display:flex;gap:8px;align-items:center}
+    .filters select,input[type=date],input[type=text]{padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);background:transparent;color:inherit}
+    .list{margin-top:12px}
+    .entry{display:flex;gap:12px;align-items:center;padding:10px;border-radius:8px;border:1px solid rgba(0,0,0,0.05);background:var(--glass);margin-bottom:8px}
+    .entry .left{flex:1}
+    .entry .amount{font-weight:700;color:var(--accent)}
+    .meta{font-size:13px;color:var(--muted)}
+    .actions{display:flex;gap:8px}
+    .small{Padding:6px 8px;border-radius:8px;font-size:13px}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(2,6,23,0.6);display:none;align-items:center;justify-content:center;padding:16px}
+    body.light .modal-backdrop{background:rgba(0,0,0,0.4)}
+    .modal{width:100%;max-width:480px;background:var(--card);padding:14px;border-radius:12px}
+    label{display:block;font-size:13px;margin-top:8px;color:var(--muted)}
+    input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);background:transparent;color:inherit}
+    textarea{min-height:80px}
+    .row{display:flex;gap:8px}
+    @media (max-width:520px){header{flex-direction:column;align-items:flex-start} .summary{flex-direction:column} .row{flex-direction:column}}
+    .hidden{display:none}
+    .muted{color:var(--muted)}
+    .file-input{display:none}
+    .empty{padding:18px;text-align:center;color:var(--muted)}
+    .kbd{font-size:12px;padding:4px 8px;border-radius:6px;background:rgba(0,0,0,0.06);display:inline-block}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Buku Catatan — Catat Belanja</h1>
+        <div class="muted" style="font-size:13px">Single file • Data tersimpan di browser • Import / Export JSON • Reset data</div>
+      </div>
+      <div class="controls">
+        <button id="btnTheme" title="Toggle theme">🌙</button>
+        <button id="btnAdd">+ Tambah</button>
+        <button class="btn ghost" id="btnExport">Export JSON</button>
+        <button class="btn ghost" id="btnImport">Import JSON</button>
+        <button class="btn ghost" id="btnReset">Reset</button>
+      </div>
+    </header>
+
+    <div class="card">
+      <div class="toolbar">
+        <div class="filters">
+          <select id="viewRange">
+            <option value="all">Semua</option>
+            <option value="day">Harian</option>
+            <option value="week">Mingguan</option>
+            <option value="month">Bulanan</option>
+          </select>
+          <input type="date" id="refDate" />
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <input type="text" id="search" placeholder="Cari (catatan, kategori)" />
+          <select id="sortBy">
+            <option value="new">Terbaru</option>
+            <option value="old">Terlama</option>
+            <option value="amount_desc">Nominal ↓</option>
+            <option value="amount_asc">Nominal ↑</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="summary">
+        <div class="tile">
+          <div class="muted">Total (view)</div>
+          <div class="value" id="totalView">Rp0</div>
+        </div>
+        <div class="tile">
+          <div class="muted">Jumlah Catatan</div>
+          <div class="value" id="countEntries">0</div>
+        </div>
+      </div>
+
+      <div class="list card" id="list"></div>
+      <div class="empty hidden" id="empty">Belum ada catatan. Tekan "Tambah" untuk mulai mencatat.</div>
+    </div>
+
+    <!-- modal form -->
+    <div class="modal-backdrop" id="modal">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h3 id="modalTitle">Tambah Catatan</h3>
+        <label>Tanggal</label>
+        <input type="date" id="fDate" />
+        <div class="row">
+          <div style="flex:1">
+            <label>Jumlah (Rp)</label>
+            <input type="number" id="fAmount" min="0" />
+          </div>
+          <div style="flex:1">
+            <label>Kategori</label>
+            <input type="text" id="fCategory" placeholder="mis. Belanja, Transport" />
+          </div>
+        </div>
+        <label>Catatan</label>
+        <textarea id="fNote" placeholder="opsional"></textarea>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+          <button class="btn ghost small" id="btnCancel">Batal</button>
+          <button class="btn small" id="btnSave">Simpan</button>
+        </div>
+      </div>
+    </div>
+
+    <input type="file" id="fileImport" class="file-input" accept="application/json" />
+
+    <footer style="margin-top:14px;color:var(--muted);font-size:13px">Versi: 1.1 • Data tersimpan di browser (localStorage). Jangan hapus browser jika ingin simpan data.</footer>
+  </div>
+
+  <script>
+    const KEY = 'expense_notebook_v1';
+    const THEME_KEY = 'expense_notebook_theme';
+
+    const btnAdd = document.getElementById('btnAdd');
+    const modal = document.getElementById('modal');
+    const btnCancel = document.getElementById('btnCancel');
+    const btnSave = document.getElementById('btnSave');
+    const fDate = document.getElementById('fDate');
+    const fAmount = document.getElementById('fAmount');
+    const fCategory = document.getElementById('fCategory');
+    const fNote = document.getElementById('fNote');
+    const listEl = document.getElementById('list');
+    const emptyEl = document.getElementById('empty');
+    const totalViewEl = document.getElementById('totalView');
+    const countEntriesEl = document.getElementById('countEntries');
+    const viewRange = document.getElementById('viewRange');
+    const refDate = document.getElementById('refDate');
+    const searchIn = document.getElementById('search');
+    const sortBy = document.getElementById('sortBy');
+    const btnExport = document.getElementById('btnExport');
+    const btnImport = document.getElementById('btnImport');
+    const fileImport = document.getElementById('fileImport');
+    const btnReset = document.getElementById('btnReset');
+    const modalTitle = document.getElementById('modalTitle');
+    const btnTheme = document.getElementById('btnTheme');
+
+    let editingId = null;
+    let entries = load();
+
+    // init
+    refDate.value = new Date().toISOString().slice(0,10);
+    applySavedTheme();
+    render();
+
+    btnAdd.addEventListener('click', ()=>openModal());
+    btnCancel.addEventListener('click', closeModal);
+    btnSave.addEventListener('click', saveEntry);
+    btnExport.addEventListener('click', exportJSON);
+    btnImport.addEventListener('click', ()=>fileImport.click());
+    fileImport.addEventListener('change', handleFileImport);
+    btnReset.addEventListener('click', resetAll);
+    viewRange.addEventListener('change', render);
+    refDate.addEventListener('change', render);
+    searchIn.addEventListener('input', render);
+    sortBy.addEventListener('change', render);
+    btnTheme.addEventListener('click', toggleTheme);
+
+    function load(){
+      try{
+        const raw = localStorage.getItem(KEY);
+        return raw ? JSON.parse(raw) : [];
+      }catch(e){ console.error('load error', e); return []; }
+    }
+    function saveAll(){ localStorage.setItem(KEY, JSON.stringify(entries)); }
+
+    function openModal(data){
+      modal.style.display = 'flex';
+      if(data){
+        modalTitle.textContent = 'Edit Catatan';
+        editingId = data.id;
+        fDate.value = data.date;
+        fAmount.value = data.amount;
+        fCategory.value = data.category;
+        fNote.value = data.note;
+      }else{
+        modalTitle.textContent = 'Tambah Catatan';
+        editingId = null;
+        fDate.value = new Date().toISOString().slice(0,10);
+        fAmount.value = '';
+        fCategory.value = '';
+        fNote.value = '';
+      }
+      setTimeout(()=>fAmount.focus(),100);
+    }
+    function closeModal(){ modal.style.display = 'none'; editingId = null; }
+
+    function saveEntry(){
+      const date = fDate.value;
+      const amount = parseFloat(fAmount.value) || 0;
+      const category = fCategory.value.trim() || 'General';
+      const note = fNote.value.trim();
+      if(!date){ alert('Pilih tanggal'); return; }
+      if(editingId){
+        const idx = entries.findIndex(e=>e.id===editingId);
+        if(idx>=0){ entries[idx] = {...entries[idx], date, amount, category, note, updatedAt: Date.now()}; }
+      }else{
+        entries.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,6), date, amount, category, note, createdAt:Date.now()});
+      }
+      saveAll(); closeModal(); render();
+    }
+
+    function render(){
+      const range = viewRange.value;
+      const ref = refDate.value ? new Date(refDate.value+'T00:00:00') : new Date();
+      let view = entries.slice();
+      const q = searchIn.value.trim().toLowerCase();
+      if(q){ view = view.filter(e=> (e.note||'').toLowerCase().includes(q) || (e.category||'').toLowerCase().includes(q)); }
+      if(range!=='all'){
+        view = view.filter(e=>{
+          const d = new Date(e.date+'T00:00:00');
+          if(range==='day') return sameDay(d,ref);
+          if(range==='week') return sameWeek(d,ref);
+          if(range==='month') return d.getFullYear()===ref.getFullYear()&&d.getMonth()===ref.getMonth();
+        });
+      }
+      const s = sortBy.value;
+      view.sort((a,b)=>{
+        if(s==='new') return (b.createdAt || 0) - (a.createdAt || 0);
+        if(s==='old') return (a.createdAt || 0) - (b.createdAt || 0);
+        if(s==='amount_desc') return b.amount - a.amount;
+        if(s==='amount_asc') return a.amount - b.amount;
+        return 0;
+      });
+      listEl.innerHTML='';
+      if(view.length===0){ emptyEl.classList.remove('hidden'); } else { emptyEl.classList.add('hidden'); }
+      const grouped = groupByDate(view);
+      let total=0,count=0;
+      Object.keys(grouped).sort((a,b)=> new Date(b)-new Date(a)).forEach(dateKey=>{
+        const header=document.createElement('div'); header.className='muted'; header.style.margin='8px 0'; header.textContent=formatDateLabel(dateKey);
+        listEl.appendChild(header);
+        grouped[dateKey].forEach(e=>{
+          const el=document.createElement('div'); el.className='entry';
+          const left=document.createElement('div'); left.className='left';
+          const title=document.createElement('div'); title.style.display='flex'; title.style.justifyContent='space-between';
+          const t1=document.createElement('div'); t1.textContent=e.category+(e.note?' — '+e.note:'');
+          const t2=document.createElement('div'); t2.className='amount'; t2.textContent=formatRupiah(e.amount);
+          title.appendChild(t1); title.appendChild(t2);
+          const meta=document.createElement('div'); meta.className='meta'; meta.textContent=e.date + (e.updatedAt ? ' • diubah '+new Date(e.updatedAt).toLocaleString() : '');
+          left.appendChild(title); left.appendChild(meta);
+          el.appendChild(left);
+          const actions=document.createElement('div'); actions.className='actions';
+          const btnEdit=document.createElement('button'); btnEdit.className='small btn ghost'; btnEdit.textContent='Edit';
+          btnEdit.addEventListener('click', ()=>openModal(e));
+          const btnDel=document.createElement('button'); btnDel.className='small btn danger'; btnDel.textContent='Hapus';
+          btnDel.addEventListener('click', ()=>{ if(confirm('Hapus catatan ini?')){ entries = entries.filter(x=>x.id!==e.id); saveAll(); render(); } });
+          actions.appendChild(btnEdit); actions.appendChild(btnDel);
+          el.appendChild(actions);
+          listEl.appendChild(el);
+          total += Number(e.amount||0); count++;
+        });
+      });
+      totalViewEl.textContent = formatRupiah(total);
+      countEntriesEl.textContent = count;
+    }
+
+    function groupByDate(arr){ const obj = {}; arr.forEach(e=>{ const k = e.date || new Date().toISOString().slice(0,10); if(!obj[k]) obj[k]=[]; obj[k].push(e); }); return obj; }
+    function formatRupiah(num){ try{ return 'Rp' + Number(num||0).toLocaleString('id-ID'); }catch(e){ return 'Rp'+num; } }
+    function sameDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+    function sameWeek(d, ref){ const startOfWeek = dt => { const t = new Date(dt); const diff = (t.getDay()+6)%7; t.setDate(t.getDate()-diff); t.setHours(0,0,0,0); return t; }; return startOfWeek(d).getTime() === startOfWeek(ref).getTime(); }
+    function formatDateLabel(d){ const dt = new Date(d+'T00:00:00'); const today = new Date(); if(sameDay(dt,today)) return 'Hari Ini'; const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1); if(sameDay(dt,yesterday)) return 'Kemarin'; return dt.toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'short', year:'numeric'}); }
+
+    function exportJSON(){
+      const data = {meta:{exportedAt:Date.now()}, entries};
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'expense_notebook_export_'+new Date().toISOString().slice(0,10)+'.json';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+
+    function handleFileImport(e){
+      const file = (e.target.files && e.target.files[0]); if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try{
+          const data = JSON.parse(reader.result);
+          let incoming = [];
+          if(Array.isArray(data.entries)) incoming = data.entries;
+          else if(Array.isArray(data)) incoming = data;
+          else if(data && Array.isArray(data.data)) incoming = data.data;
+          if(incoming.length===0){ alert('File JSON tidak berisi data yang cocok.'); return; }
+          if(confirm('Import data: pilih OK=merge, Cancel=replace')){
+            entries = entries.concat(incoming.map(normalizeEntry));
+          } else {
+            entries = incoming.map(normalizeEntry);
+          }
+          saveAll(); render(); alert('Import berhasil');
+        }catch(err){ alert('Gagal membaca file: '+err.message); }
+      };
+      reader.readAsText(file);
+      fileImport.value = '';
+    }
+
+    function normalizeEntry(e){
+      return {
+        id: e.id || 'e'+Date.now()+Math.random().toString(36).slice(2,6),
+        date: e.date || new Date().toISOString().slice(0,10),
+        amount: Number(e.amount||0),
+        category: e.category || 'General',
+        note: e.note || '',
+        createdAt: e.createdAt || Date.now(),
+        updatedAt: e.updatedAt || null
+      };
+    }
+
+    function resetAll(){
+      if(!confirm('Reset akan menghapus semua data. Lanjutkan?')) return;
+      localStorage.removeItem(KEY);
+      entries = [];
+      render();
+      alert('Data telah di-reset');
+    }
+
+    // THEME: toggle and persist
+    function applySavedTheme(){
+      try{
+        const saved = localStorage.getItem(THEME_KEY);
+        if(saved === 'light'){ document.body.classList.add('light'); btnTheme.textContent = '☀️'; }
+        else if(saved === 'dark'){ document.body.classList.remove('light'); btnTheme.textContent = '🌙'; }
+        else {
+          const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if(prefersDark){ document.body.classList.remove('light'); btnTheme.textContent = '🌙'; }
+          else { document.body.classList.add('light'); btnTheme.textContent = '☀️'; }
+        }
+      }catch(e){}
+    }
+    function toggleTheme(){
+      if(document.body.classList.contains('light')){
+        document.body.classList.remove('light');
+        localStorage.setItem(THEME_KEY, 'dark');
+        btnTheme.textContent = '🌙';
+      } else {
+        document.body.classList.add('light');
+        localStorage.setItem(THEME_KEY, 'light');
+        btnTheme.textContent = '☀️';
+      }
+    }
+
+    // keyboard shortcuts
+    document.addEventListener('keydown', e=>{
+      if(e.key==='Escape') closeModal();
+      if((e.ctrlKey||e.metaKey) && e.key==='k'){ e.preventDefault(); document.getElementById('search').focus(); }
+    });
+
+    // initial sample placeholder (commented by default)
+    if(entries.length===0){
+      // optionally add a sample entry for first-time users
+      // entries.push({id:'e'+Date.now(), date:new Date().toISOString().slice(0,10), amount:50000, category:'Belanja', note:'Contoh', createdAt:Date.now()});
+      // saveAll();
+    }
+  if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("service-worker.js")
+        .then(() => console.log("Service Worker registered"))
+        .catch(err => console.error("SW registration failed:", err));
+    }
+  </script>
+</body>
+</html>
